@@ -1,0 +1,7 @@
+16:09:19: DEBUG =>  Llegits 7 equips autoritzats en el sistema
+16:09:19: DEBUG =>  Socket UDP actiu
+16:09:19: DEBUG =>  Creat fill per gestionar la BBDD de dispositius
+16:09:19: INFO  =>  Establert temporitzador per la gestió de la BBDD
+16:09:19: DEBUG =>  Socket TCP actiu
+16:09:23: MSG.  =>  Finalització per ^C
+16:09:23: DEBUG =>  Finalitzat procés 493
