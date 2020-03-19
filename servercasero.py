@@ -3,8 +3,8 @@
 import socket #import the socket module
 
 s = socket.socket() #Create a socket object
-port = 2020 # Reserve a port for your service
-s.bind(('', port)) #Bind to the port
+port = 7777 # Reserve a port for your service
+s.bind(('localhost', port)) #Bind to the port
 
 s.listen(5) #Wait for the client connection
 while True:
