@@ -1,0 +1,2 @@
+https://www.geeksforgeeks.org/tcp-server-client-implementation-in-c/
+https://www.geeksforgeeks.org/udp-server-client-implementation-c/

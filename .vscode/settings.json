@@ -1,0 +1,10 @@
+{
+    "python.pythonPath": "C:\\Users\\aguil\\AppData\\Local\\Programs\\Python\\Python38-32\\python.exe",
+    "files.associations": {
+        "stdio.h": "c",
+        "types.h": "c"
+    },
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true,
+    "python.linting.pylintPath": "C:\\Users\\aguil\\AppData\\Roaming\\Python\\Python38\\Scripts\\pylint.exe"
+}
