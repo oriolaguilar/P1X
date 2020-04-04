@@ -317,6 +317,7 @@ def check_ALIVE_response(client_id, num):
             random_equals = random_number_REG_ACK == random_number_received
             server_id_equals = server_id_REG_ACK == server_id
             if not(client_id_equals and random_equals and server_id_equals):
+                print_pdu_udp_debug("Rebut #" + str(num), response)
                 print_debug("Dades del paquet ALIVE incorrectes")
                 print_debug("Torna a començar el procés de registre")
                 main()
@@ -415,9 +416,9 @@ def check_response(client_id, local_tcp, elements, time, host, num_response):
 
     packet_type, server_id, random_number, data =  struct.unpack('1B 13s 9s 61s', response)
 
-    server_id_REG_ACK = server_id
     if packet_type == REG_ACK:
         if client_status == WAIT_ACK_REG:
+            server_id_REG_ACK = server_id
             print_pdu_udp_debug("Rebut", response)
             return process_REG_ACK(local_tcp, elements, client_id, random_number, data, host)
 
@@ -436,14 +437,14 @@ def check_response(client_id, local_tcp, elements, time, host, num_response):
 
     elif packet_type == INFO_ACK:
         print_pdu_udp_debug("Rebut", response)
-        if client_status == WAIT_ACK_INFO and INFO_ACK_data_is_OK(server_id.decode()):
+        if client_status == WAIT_ACK_INFO and INFO_ACK_data_is_OK(server_id, random_number):
             client_status = REGISTERED
             tcp_server = repr(data).split('\\')[0][2:]
             print_msg("El client ha passat al estat REGISTERED")
             return RECEIVED
 
     elif packet_type == INFO_NACK:
-        if client_status == WAIT_ACK_INFO and INFO_ACK_data_is_OK(server_id.decode()):
+        if client_status == WAIT_ACK_INFO and INFO_ACK_data_is_OK(server_id, random_number):
             print_pdu_udp_debug("Rebut:", response)
             reason = repr(data).split('\\')[0][2:]
             print_debug("No s'ha acceptat el paquet pel següent motiu: "+reason)
@@ -451,7 +452,6 @@ def check_response(client_id, local_tcp, elements, time, host, num_response):
             print_msg("El client ha passat al estat NOT_REGISTERED")
             print_debug("Es continuarà enviant paquets REG_REQ sense iniciar un nou registre")
             return KEEP_SENDING
-        print_pdu_udp_debug("Rebut:", response)
 
     print_pdu_udp_debug("Rebut:", response)
     print_debug("S'ha rebut un paquet no esperat o amb les dades incorrectes")
@@ -460,11 +460,11 @@ def check_response(client_id, local_tcp, elements, time, host, num_response):
     return START_AGAIN
 
 
-def  INFO_ACK_data_is_OK(server_id):
+def  INFO_ACK_data_is_OK(server_id, random_number):
     #No se que es considera correcte o no
-    server_id = server_id[:12]#treiem el últim caracter
-    has_12_chars = len(server_id) == 12
-    return has_12_chars and is_alphanumeric(server_id)
+    server_id_OK = server_id == server_id_REG_ACK
+    random_number_OK = random_number == random_number_REG_ACK
+    return server_id_OK and random_number_OK
 
 def is_alphanumeric(s):
     numbers = False
@@ -498,7 +498,7 @@ def process_REG_ACK(local_tcp, elements, client_id, random_number, ip_address, h
     received_packet = check_response(client_id, local_tcp, elements, 2*t, host, 2)
     if not received_packet:
         client_status = NOT_REGISTERED
-        print_debug("El client no ha rebut cap paquet en "+str(2*t)+" segons")
+        #print_debug("El client no ha rebut cap paquet en "+str(2*t)+" segons")
         print_msg("El client ha passat a l'estat NOT_REGISTERED")
 
     return received_packet
