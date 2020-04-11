@@ -149,8 +149,8 @@ def element_exists(element_sent):
 
 def foo(client_id):
     while True:
+        command = input()
         if client_status == SEND_ALIVE:
-            command = input("$ ")
             command_tcp_server(command, client_id)
     print("EXIT FOO")
     exit(0)
@@ -295,6 +295,7 @@ def keep_comunication(client_id, host, port):
         response_time_end = time.time()
         if (response_time_end-response_time_init) < v:
             time.sleep(v - (response_time_end - response_time_init))
+
         if client_status != SEND_ALIVE:
             main()
             exit()
