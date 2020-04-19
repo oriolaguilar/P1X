@@ -1,5 +1,5 @@
-#define _XOPEN_SOURCE
-#define  _GNU_SOURCE
+#define _XOPEN_SOURCE //Utilitzat per evitar warning per utilitzar la funció kill()
+#define  _GNU_SOURCE //Utilitzat per evitar warning per utilitzar la funcio getline()
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -203,12 +203,6 @@ void attend_clients(){
     while(true){
         recvfrom(sock_udp, &recvmsg, 84, 0, (struct sockaddr*)&cliaddr, &len);
         receivedpacket = get_pdu_udp(recvmsg);
-        if (!authorized_client(receivedpacket.id)){
-            char* not_authorized = malloc(sizeof(char)*50);
-            sprintf(not_authorized, "%s: No es un dispositiu autoritzat", receivedpacket.id);
-            print_msg(not_authorized);
-            continue;
-        }
         if (receivedpacket.type == REG_REQ){
             pid = fork();
             //En cas de rebre REG_REQ es crearà un procés nou que gestionarà al client
@@ -227,6 +221,13 @@ void attend_clients(){
                 }
             }
         }else if (receivedpacket.type == ALIVE){
+            if (!authorized_client(receivedpacket.id)){
+                //En cas de que el el client no existeixi
+                char* not_authorized = malloc(sizeof(char)*50);
+                sprintf(not_authorized, "%s: No es un dispositiu autoritzat", receivedpacket.id);
+                print_msg(not_authorized);
+                continue;
+            }
             //En cas de rebre un ALIVE se li reenviarà pel pipe al client en qüestió
             if (client_specs[get_client_position(receivedpacket.id)].status_client == REGISTERED ||
                 client_specs[get_client_position(receivedpacket.id)].status_client == SEND_ALIVE){
@@ -234,8 +235,7 @@ void attend_clients(){
                     write(FD[client_i2][1], &receivedpacket, sizeof(struct pdu_udp));
                 }else{
                     print_debug("Rebut ALIVE en el estat incorrecte (paquet ignorat)");
-                }
-            
+                }  
         }
     }
 }
@@ -249,11 +249,16 @@ void register_clients(struct pdu_udp receivedpacket, struct sockaddr_in cliaddr,
 
     if (!correct_packet_REG_REQ(receivedpacket)){
         print_debug("Informació rebuda incorrecta!");
-        int i = get_client_position(client_id);
-        client_specs[i].status_client = DISCONNECTED;
-        sprintf(client_status, "El client %s passa a l'estat DISCONNECTED", client_spec.id);
-        print_debug(client_status);
-        exit(-1);
+        struct pdu_udp pdu_rej;
+        pdu_rej.type = REG_REJ;
+        strcpy((char *)pdu_rej.id, (const char*)configuration.id);
+        strcpy((char *)pdu_rej.random_number, (const char*)"00000000");
+        strcpy((char *)pdu_rej.data, (const char*)"Paquet amb info incorrecta!");
+        char rej_msg[84] = {'\0'};
+        set_pdu_udp(rej_msg, pdu_rej);
+        sendto(sock_udp_v2, rej_msg, sizeof(rej_msg), 0, (struct sockaddr*)&cliaddr, len);
+        print_pdu_udp_debug("Enviat", pdu_rej);
+        client_to_DISCONNECTED(client_spec.id);
     }
     //Es crea el nou port i el numero aleatori
     srand(time(0));
@@ -285,7 +290,6 @@ void register_clients(struct pdu_udp receivedpacket, struct sockaddr_in cliaddr,
     print_msg(client_status);
     client_spec.status_client = WAIT_INFO;
     write(FD_specs[1], &client_spec, sizeof(struct client_spec));
-
     //Es crea el temporitzador per rebre el paquet REG_INFO
     fd_set fd;
     FD_ZERO (&fd);
@@ -294,10 +298,7 @@ void register_clients(struct pdu_udp receivedpacket, struct sockaddr_in cliaddr,
     struct timeval timeout={s,0};
     if (select(FD_SETSIZE, &fd, NULL, NULL, &timeout) == 0){
         print_msg("No s'ha rebut cap paquet REG_INFO");
-        print_msg("El client passa a DISCONNECTED");
-        client_spec.status_client = DISCONNECTED;
-        write(FD_specs[1], &client_spec, sizeof(struct client_spec));
-        exit(-1);
+        client_to_DISCONNECTED(client_spec.id);
     }
     char recvmsg[84] = {'\0'};
     n = recvfrom(sock_udp_v2, &recvmsg, 84, 0, (struct sockaddr*)&cliaddr, &len);
@@ -318,7 +319,7 @@ void register_clients(struct pdu_udp receivedpacket, struct sockaddr_in cliaddr,
         //Resposta en cas de que el paquet rebut sigui incorrecte
         print_msg("Informació paquet REG_INFO incorrecta.");
         struct pdu_udp pdu_nack;
-        pdu_nack.type = REG_NACK;
+        pdu_nack.type = INFO_NACK;
         strcpy((char *)pdu_nack.id, (const char*)configuration.id);
         strcpy((char *)pdu_nack.random_number, (const char*)random_number_str);
         strcpy((char *)pdu_nack.data, (const char*)"Paquet amb info incorrecta!");
