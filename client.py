@@ -65,15 +65,20 @@ num_registers = 0
 pid_commands = None
 pid_wait_connections = None
 elements = []
+first_time_main = True
 
 def main():
     #S'obtenen totes les variables dels fitxers de config.
-    global elements, client_id, local_tcp, server
+    global elements, client_id, local_tcp, server, first_time_main
     signal.signal(signal.SIGINT, exitprogram)
     signal.signal(signal.SIGUSR1, exitprogram)
     client_file = check_arguments()
     client_id, elements_semicolon, local_tcp, server, server_udp = read_client(client_file)
     elements = read_elements(elements_semicolon)
+
+    if first_time_main:
+        first_time_main = False
+        stat(client_id)
 
     register(client_id, server, server_udp, local_tcp, elements_semicolon)
     keep_comunication(client_id, server, server_udp)
@@ -102,7 +107,7 @@ def register(client_id, host, port, local_tcp, elements):
         num_registers += 1
         print_msg("El client passa a l'estat NOT REGISTERED. Procés de registre num: "+str(count1+1))
         client_status = NOT_REGISTERED
-        for count2 in range(p):
+        for count2 in range(p-1):
             time2wait = t
             sock_udp.sendto(register_packet, address)
             print_pdu_udp_debug("Enviat", register_packet)
@@ -118,16 +123,16 @@ def register(client_id, host, port, local_tcp, elements):
                 break
 
         if received_packet == START_AGAIN:
+            time.sleep(u)
             continue
 
         time2wait = t+t
-        for count3 in range(p, n):
+        for count3 in range(p-1, n):
             sock_udp.sendto(register_packet, address)
             print_pdu_udp_debug("Enviat", register_packet)
             if client_status != WAIT_ACK_REG:
                 client_status = WAIT_ACK_REG
                 print_msg("El client ha passat a l'estat WAIT_ACK_REG")
-            time2wait = u if count3 == n-1 else time2wait
             received_packet = check_response(client_id, local_tcp, elements, time2wait, host, 1)
             if received_packet == RECEIVED:
                 # Si es rep RECEIVED, acabara la funcio de registre
@@ -139,8 +144,9 @@ def register(client_id, host, port, local_tcp, elements):
                 break
 
         if received_packet == START_AGAIN:
+            time.sleep(u)
             continue
-        #time.sleep(u)
+        time.sleep(u)
 
     print_msg("No s'ha pogut registrar")
     exitprogram(0,0)
@@ -152,9 +158,7 @@ def check_response(client_id, local_tcp, elements, time, host, num_response):
     if sock[0]:
         response = sock[0][0].recv(84)
     else:
-        print_debug("No s'ha rebut cap paquet en el temps esperat: " + str(time) + " segons")
         if num_response == 1:
-            print_debug("Es continuarà enviant paquets REG_REQ, sense iniciar un nou registre")
             return KEEP_SENDING
         else: #num_response == 2
             return START_AGAIN
@@ -171,8 +175,7 @@ def check_response(client_id, local_tcp, elements, time, host, num_response):
     elif packet_type == REG_NACK:
         print_pdu_udp_debug("Rebut", response)
         client_status = NOT_REGISTERED
-        print_debug("El client ha passat a l'estat NOT_REGISTERED")
-        print_debug("Es continuarà enviant paquets REG_REQ sense iniciar un nou registre")
+        print_msg("El client ha passat a l'estat NOT_REGISTERED")
         return KEEP_SENDING
 
     elif packet_type == REG_REJ:
@@ -196,7 +199,6 @@ def check_response(client_id, local_tcp, elements, time, host, num_response):
             print_debug("No s'ha acceptat el paquet pel següent motiu: "+reason)
             client_status = NOT_REGISTERED
             print_msg("El client ha passat al estat NOT_REGISTERED")
-            print_debug("Es continuarà enviant paquets REG_REQ sense iniciar un nou registre")
             return KEEP_SENDING
 
     #En cas de que no es rebi cap paquet dels esperats
@@ -258,7 +260,6 @@ def keep_comunication(client_id, host, port):
     num_alive_send = 1
     num_alive_recv = 1
     num_con_alive_wo_recv = 0
-    last_received = True
     first_alive = False
 
     while True:
@@ -269,7 +270,6 @@ def keep_comunication(client_id, host, port):
             num_alive_recv += 1
             num_of_strikes = 0
             num_con_alive_wo_recv = 0
-            last_received = True
             first_alive = True
         else:
             num_con_alive_wo_recv += 1
@@ -331,7 +331,8 @@ def check_ALIVE_response(client_id):
                 print_pdu_udp_debug("Rebut", response)
                 print_debug("Dades del paquet ALIVE incorrectes")
                 print_debug("Torna a començar el procés de registre")
-                num_registers = 0
+                if client_status == SEND_ALIVE:
+                    num_registers = 0
                 main()
                 exitprogram(0,0)
 
@@ -364,7 +365,8 @@ def check_ALIVE_response(client_id):
         client_status = NOT_REGISTERED
         print_debug("El client ha passat a l'estat NOT REGISTERED")
         print_debug("Torna a començar el procés de registre")
-        num_registers = 0
+        if client_status == SEND_ALIVE:
+            num_registers = 0
         main()
         exitprogram(0,0)
         #Tornar a registrar-se
@@ -532,14 +534,6 @@ def check_TCP_send_response(client_id, element_sent, value_sent, random_sent):
        print_msg("Finalitzada comunicacio TCP amb el servidor (port: " + tcp_server+")")
        return
 
-
-   #try:
-   #    response = socktcp.recv(127)
-   #except:
-   #    print("Les dades no han estat acceptades")
-   #    print_msg("Finalitzada comunicacio TCP amb el servidor (port: " + tcp_server+")")
-   #    return
-
    packet_type, id, random_number, element, value, info = struct.unpack('1B 13s 9s 8s 16s 80s', response)
 
    if packet_type == DATA_REJ or (repr(info).split('\\')[0][2:] != client_id or random_number != random_sent):
@@ -660,7 +654,7 @@ def check_arguments():
 def print_debug(text):
     if debug:
         local_time = time.localtime()
-        print(time_format(local_time.tm_hour)+':'+time_format(local_time.tm_min)+':'+time_format(local_time.tm_sec)+": DEBUG    => "+text)
+        print(time_format(local_time.tm_hour)+':'+time_format(local_time.tm_min)+':'+time_format(local_time.tm_sec)+": DEBUG  => "+text)
 
 def print_pdu_udp_debug(env_o_rec, response):
     if debug:
@@ -668,9 +662,9 @@ def print_pdu_udp_debug(env_o_rec, response):
         print_debug(env_o_rec+": bytes="+str(len(response))+", paquet="+hex_to_packet_str(packet_type)+", id="+repr(id).split('\\')[0][2:]+", rndm="+repr(random_number).split('\\')[0][2:]+", dades="+repr(data).split('\\')[0][2:])
 
 def print_pdu_tcp_debug(env_o_rec, response):
-    if True:#debug:
+    if debug:
         packet_type, id, random_number, element, value, info = struct.unpack('1B 13s 9s 8s 16s 80s', response)
-        print(env_o_rec+": bytes="+str(len(response))+", paquet="+hex_to_packet_str(packet_type)+", id="+
+        print_debug(env_o_rec+": bytes="+str(len(response))+", paquet="+hex_to_packet_str(packet_type)+", id="+
                     repr(id).split('\\')[0][2:]+", rndm="+repr(random_number).split('\\')[0][2:]+", element="+repr(element).split('\\')[0][2:]
                     +", valors ="+repr(value).split('\\')[0][2:]+", dades="+repr(info).split('\\')[0][2:])
 

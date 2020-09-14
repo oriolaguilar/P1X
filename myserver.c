@@ -155,7 +155,7 @@ void write_in_memory_set_get(struct client_spec spec_tcp_client, struct pdu_tcp 
 #define x 3
 #define w 3
 
-//Es considera que hi ha un número maxim de clients
+//Es considera que hi ha un número maxim de clients a poder atendre
 #define MAXNUMBER_CLIENTS 7
 
 /*Variables globals*/
@@ -182,6 +182,7 @@ int main(int argc, char *argv[]){
     attend_clients();
 }
 void attend_clients(){
+    //Tots el processos quan rebin aquesta senyal acabaran
     signal(SIGUSR1, exit_program);
     //Inicialitza el pipe que servirà per actualitzar les especificacions dels clients
     pipe(FD_specs);
@@ -248,6 +249,7 @@ void register_clients(struct pdu_udp receivedpacket, struct sockaddr_in cliaddr,
     print_pdu_udp_debug("Rebut", receivedpacket);
 
     if (!correct_packet_REG_REQ(receivedpacket)){
+        //Informació incorrecta -> s'envia REG_REJ
         print_debug("Informació rebuda incorrecta!");
         struct pdu_udp pdu_rej;
         pdu_rej.type = REG_REJ;
@@ -458,7 +460,7 @@ void keep_comunication(struct sockaddr_in cliaddr, int len){
             FD_SET (FD[client_i][0], &fd);
             //Establim temporitzador pels alive posteriors
             //Si en 9 segons no es rep res vol dir que no s'han rebut 3 alives consecutius
-            struct timeval timeout={w*x,0};//
+            struct timeval timeout={w*x,0};//Es considera que s'ha d'esperar 3 segons per cada ALIVE que arribi
             if (select(FD_SETSIZE, &fd, NULL, NULL, &timeout) == 0){
                 print_msg("No s'ha rebut 3 ALIVE consecutius");
                 client_to_DISCONNECTED(client_spec.id);
@@ -717,7 +719,6 @@ void process_tcp_packet(int sock_tcp_fd){
     struct timeval timeout={m,0};
     if (select(FD_SETSIZE, &fd, NULL, NULL, &timeout) == 0){
         print_msg("No s'ha rebut el paquet TCP");
-        //client_to_DISCONNECTED(client_spec.id);
     }
     read(sock_tcp_fd, &recvmsg, 127);
     receivedpacket = get_pdu_tcp(recvmsg);
@@ -725,6 +726,17 @@ void process_tcp_packet(int sock_tcp_fd){
         char msg[70];
         sprintf(msg, "Id client %s no autoritzat", receivedpacket.id);
         print_msg(msg);
+        struct pdu_tcp response;
+        response.type = DATA_REJ;
+        strcpy((char *)response.id, (const char*)configuration.id);
+        strcpy((char *)response.random_number, (const char*)"00000000");
+        strcpy((char *)response.element, (const char*)receivedpacket.element);
+        strcpy((char *)response.value, (const char*)receivedpacket.value);
+        strcpy((char *)response.info, (const char*)"ID no reconegut");
+        print_pdu_tcp_debug("Enviat ", response);
+        char sendmsg[127] = {'\0'};
+        set_pdu_tcp(sendmsg, response);
+        write(sock_tcp_fd, sendmsg, 127);
         exit(-1);
     }
     struct client_spec spec_tcp_client = client_specs[get_client_position(receivedpacket.id)];
@@ -773,7 +785,7 @@ void wrong_random_response(struct client_spec spec_tcp_client, struct pdu_tcp re
     strcpy((char *)response.random_number, (const char*)spec_tcp_client.random_number);
     strcpy((char *)response.element, (const char*)receivedpacket.element);
     strcpy((char *)response.value, (const char*)receivedpacket.value);
-    strcpy((char *)response.info, (const char*)"Random random incorrecte");
+    strcpy((char *)response.info, (const char*)"Random incorrecte");
     print_pdu_tcp_debug("Enviat ", response);
     char sendmsg[127] = {'\0'};
     set_pdu_tcp(sendmsg, response);
@@ -1234,16 +1246,18 @@ void print_client_specs(){
     printf(
     "-----Id.---- --RNDM-- ------ IP ----- -----ESTAT----- --ELEMENTS----------------------------------\n");
     for(int i = 0; i < MAXNUMBER_CLIENTS; i++){
-        char* rndm = malloc(9);
-        rndm = (client_specs[i].status_client == DISCONNECTED )? "    -    " : client_specs[i].random_number;
-        char* ip = malloc(9);
-        ip = (client_specs[i].status_client == DISCONNECTED )? "       -       " : "  127.0.0.1     ";
-        char* elements = malloc(17);
-        elements = (client_specs[i].status_client == DISCONNECTED )? "" : client_specs[i].elements;
-        char* line = malloc(100);
-        sprintf(line,"%s %s %s %s\t%s\n", 
-        client_specs[i].id, rndm, ip, hex_to_status(client_specs[i].status_client), elements);
-        printf("%s", line);
+        if (strcmp(client_specs[i].id, "") != 0){
+            char* rndm = malloc(9);
+            rndm = (client_specs[i].status_client == DISCONNECTED )? "    -    " : client_specs[i].random_number;
+            char* ip = malloc(9);
+            ip = (client_specs[i].status_client == DISCONNECTED )? "       -       " : "  127.0.0.1     ";
+            char* elements = malloc(17);
+            elements = (client_specs[i].status_client == DISCONNECTED )? "" : client_specs[i].elements;
+            char* line = malloc(100);
+            sprintf(line,"%s %s %s %s\t%s\n", 
+            client_specs[i].id, rndm, ip, hex_to_status(client_specs[i].status_client), elements);
+            printf("%s", line);
+        }
     }
     printf("\n");
 }
